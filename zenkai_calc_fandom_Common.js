@@ -1,0 +1,227 @@
+/* ============================================================
+   Zenkai Optimiser — Dragonfist Limitless
+   PASTE THIS INTO  MediaWiki:Common.js  (admin access required)
+
+   Then on any wiki page, in the SOURCE editor, add this one line
+   where you want the calculator:
+       <div id="zenkai-calc"></div>
+   ============================================================ */
+
+(function () {
+    "use strict";
+
+// ---- Power-step table (Calc!A6:F30): [start, end, perLevel, levels, cumStart, cumEnd] ----
+  // Extended past 40,000,000 by continuing the table's doubling pattern.
+  var STEPS = (function(){
+    var base = [
+      [1,1.5,0.01,50,0,50],[1.5,2.5,0.02,50,50,100],[2.5,3.52,0.03,34,100,134],
+      [3.52,4.52,0.04,25,134,159],[4.52,5.52,0.05,20,159,179],[5.52,6.54,0.06,17,179,196],
+      [6.54,7.52,0.07,14,196,210],[7.52,20,0.08,156,210,366],[20,50.08,0.16,188,366,554],
+      [50.08,50.25,0.17,1,554,555],[50.25,160,0.25,439,555,994],[160,500,0.5,680,994,1674],
+      [500,2000,1,1500,1674,3174],[2000,4000,2,1000,3174,4174],[4000,8000,5,800,4174,4974],
+      [8000,16004,12,667,4974,5641],[16004,16025,21,1,5641,5642],[16025,32000,25,639,5642,6281],
+      [32000,120020,60,1467,6281,7748],[120020,240080,180,667,7748,8415],
+      [240080,500000,360,722,8415,9137],[500000,1000000,800,625,9137,9762],
+      [1000000,2000000,2000,500,9762,10262],[2000000,5000000,4000,750,10262,11012],
+      [5000000,10000000,8000,625,11012,11637],[10000000,20000000,16000,625,11637,12262],
+      [20000000,40000000,32000,625,12262,12887]
+    ];
+    var last=base[base.length-1], start=last[1], per=last[2], cum=last[5];
+    while(start < 2560000000){
+      var nend=start*2, nper=per*2, lv=Math.round((nend-start)/nper);
+      base.push([start,nend,nper,lv,cum,cum+lv]); cum+=lv; start=nend; per=nper;
+    }
+    return base;
+  })();
+
+  // ---- PP stages (PP sheet col A = stage, col F = boss power) ----
+  var PP = [[1,85.7],[2,98.4],[3,111.0],[4,125.0],[5,139.0],[6,154.0],[7,169.0],[8,185.0],[9,201.0],[10,249.0],[11,235.0],[12,253.0],[13,272.0],[14,291.0],[15,311.0],[16,332.0],[17,353.0],[18,375.0],[19,398.0],[20,482.0],[21,446.0],[22,471.0],[23,497.0],[24,524.0],[25,551.0],[26,580.0],[27,609.0],[28,640.0],[29,671.0],[30,804.0],[31,737.0],[32,772.0],[33,807.0],[34,844.0],[35,882.0],[36,921.0],[37,961.0],[38,1003.0],[39,1046.0],[40,1245.0],[41,1135.0],[42,1182.0],[43,1230.0],[44,1280.0],[45,1331.0],[46,1384.0],[47,1438.0],[48,1494.0],[49,1552.0],[50,1841.0],[51,1672.0],[52,1735.0],[53,1800.0],[54,1866.0],[55,1935.0],[56,2005.0],[57,2078.0],[58,2152.0],[59,2229.0],[60,2638.0],[61,2390.0],[62,2473.0],[63,2559.0],[64,2648.0],[65,2739.0],[66,2832.0],[67,2929.0],[68,3028.0],[69,3129.0],[70,3696.0],[71,3341.0],[72,3452.0],[73,3565.0],[74,3682.0],[75,3802.0],[76,3926.0],[77,4052.0],[78,4183.0],[79,4316.0],[80,5090.0],[81,4595.0],[82,4740.0],[83,4890.0],[84,5043.0],[85,5200.0],[86,5362.0],[87,5528.0],[88,5698.0],[89,5873.0],[90,6918.0],[91,6238.0],[92,6428.0],[93,6623.0],[94,6823.0],[95,7028.0],[96,7239.0],[97,7455.0],[98,7677.0],[99,7906.0],[100,20262.0],[101,17179.0],[102,17684.0],[103,18204.0],[104,18737.0],[105,19284.0],[106,19845.0],[107,20421.0],[108,21012.0],[109,21619.0],[110,25419.0],[111,22880.0],[112,23536.0],[113,24208.0],[114,24898.0],[115,25606.0],[116,26332.0],[117,27077.0],[118,27841.0],[119,28625.0],[120,33634.0],[121,30254.0],[122,31101.0],[123,31969.0],[124,32859.0],[125,33772.0],[126,34708.0],[127,35668.0],[128,36653.0],[129,37663.0],[130,44227.0],[131,39761.0],[132,40850.0],[133,41967.0],[134,43112.0],[135,44286.0],[136,45490.0],[137,46724.0],[138,47990.0],[139,49287.0],[140,57848.0],[141,51981.0],[142,53379.0],[143,54812.0],[144,56280.0],[145,57786.0],[146,59330.0],[147,60912.0],[148,62533.0],[149,64196.0],[150,75317.0],[151,67645.0],[152,69435.0],[153,71269.0],[154,73149.0],[155,75075.0],[156,77049.0],[157,79073.0],[158,81146.0],[159,83270.0],[160,97654.0],[161,87678.0],[162,89964.0],[163,92306.0],[164,94706.0],[165,97165.0],[166,99685.0],[167,102266.0],[168,104911.0],[169,107621.0],[170,126166.0],[171,113241.0],[172,116155.0],[173,119140.0],[174,122197.0],[175,125330.0],[176,128539.0],[177,131826.0],[178,135194.0],[179,138643.0],[180,162487.0],[181,145795.0],[182,149502.0],[183,153299.0],[184,157188.0],[185,161171.0],[186,165250.0],[187,169429.0],[188,173708.0],[189,178091.0],[190,208662.0],[191,187176.0],[192,191884.0],[193,196705.0],[194,201643.0],[195,206699.0],[196,211876.0],[197,217178.0],[198,222608.0],[199,228168.0],[200,582146.0],[201,491365.0],[202,503602.0],[203,516132.0],[204,528961.0],[205,542097.0],[206,555547.0],[207,569319.0],[208,583418.0],[209,597855.0],[210,700154.0],[211,627767.0],[212,643260.0],[213,659121.0],[214,675359.0],[215,691983.0],[216,709002.0],[217,726425.0],[218,744262.0],[219,762521.0],[220,892814.0],[221,800347.0],[222,819934.0],[223,839985.0],[224,860510.0],[225,881520.0],[226,903026.0],[227,925039.0],[228,947572.0],[229,970636.0],[230,1136279.0],[231,1018408.0],[232,1043141.0],[233,1068455.0],[234,1094365.0],[235,1120884.0],[236,1148026.0],[237,1175805.0],[238,1204237.0],[239,1233335.0],[240,1443560],[241,1293594.0],[242,1324786.0],[243,1356708.0],[244,1389378.0],[245,1422811.0],[246,1457026.0],[247,1492041.0],[248,1527873.0],[249,1564542.0],[250,1830933.0],[251,1640466.0],[252,1679761.0],[253,1719971.0],[254,1761118.0],[255,1803223.0],[256,1846308.0],[257,1890394.0],[258,1935506.0],[259,1981666.0],[260,2318740.0],[261,2077226.0],[262,2126677.0],[263,2177274.0],[264,2229045.0],[265,2282015.0],[266,2336213.0],[267,2391666.0],[268,2448402.0],[269,2506451.0],[270,2932392.0],[271,2626608.0],[272,2688777.0],[273,2752383.0],[274,2817457.0],[275,2884033.0],[276,2952145.0],[277,3021828.0],[278,3093117.0],[279,3166050.0],[280,3703614.0],[281,3316992.0],[282,3395080.0],[283,3474964.0],[284,3556685.0],[285,3640285.0],[286,3725807.0],[287,3813293.0],[288,3902789.0],[289,3994339.0],[290,4671988.0],[291,4183789.0],[292,4281785.0],[293,4382027.0],[294,4484566.0],[295,4589454.0],[296,4696744.0],[297,4806489.0],[298,4918746.0],[299,5033570.0],[300,12822360.0],[301,10805866.0],[302,11057768.0],[303,11315424.0],[304,11578964.0],[305,11848518.0],[306,12124224.0],[307,12406218.0],[308,12694642.0],[309,12989641.0],[310,15190128.0],[311,13599956.0],[312,13915577.0],[313,14238382.0],[314,14568534.0],[315,14906197.0],[316,15251539.0],[317,15604731.0],[318,15965951.0],[319,16335378.0],[320,19100795.0],[321,17099592.0],[322,17494759.0],[323,17898892.0],[324,18312193.0],[325,18734866.0],[326,19167122.0],[327,19609174.0],[328,20061241.0],[329,20523547.0],[330,23995795.0],[331,21479796.0],[332,21974211.0],[333,22479812.0],[334,22996847.0],[335,23525571.0],[336,24066245.0],[337,24619137.0],[338,25184517.0],[339,25762665.0],[340,30118703.0],[341,26958408.0],[342,27576591.0],[343,28208718.0],[344,28855100.0],[345,29516053.0],[346,30191903.0],[347,30882980.0],[348,31589623.0],[349,32312178.0],[350,37773000.0],[351,33806452.0],[352,34578900.0],[353,35368723.0],[354,36176307.0],[355,37002048.0],[356,37846347.0],[357,38709618.0],[358,39592521.0],[359,40494767.0],[360,47484000.0],[361,42360970.0],[362,43352607.0],[363,44311880.0],[364,45320273.0],[365,46351277.0],[366,47405393.0],[367,48143384.0],[368,49585021.0],[369,50712592.0],[370,59272000.0],[371,53040977.0],[372,54244921.0],[373,55412000.0],[374,56734230.0],[375,58020175.0],[376,59336138.0],[377,60680282.0],[378,62055682.0],[379,63461201.0],[380,74169278.0],[381,66367168.0],[382,67868939.0],[383,69404275.0],[384,70973878.0],[385,72578062.0],[386,74218962.0],[387,76895928.0],[388,77000000.0],[389,79362942.0],[390,92748135.0],[391,82986216.0],[392,84858616.0],[393,86000000.0],[394,88729440.0],[395,90729723.0],[396,92774524.0],[397,94864000.0],[398,97001370.0],[399,99485960.0],[400,252460528.0]];
+
+  function Iaward(B, rec){ return Math.min(0.08 + (B/rec*8/70)/(1.08 + B/rec*8/70), 0.16); }
+  function rnd(x){ return Math.floor(x + 0.5); }
+
+  function perStep(rec){
+    return STEPS.map(function(s){
+      var B=s[1], C=s[2], I=Iaward(B, rec), H=rnd(B/(1+I)*I/C), J=B - H*C;
+      return {J:J, H:H};
+    });
+  }
+
+  // Power Up aura boost (% of base added as temporary aura). Tiered by power.
+  function auraPct(J){
+    if(J<20)     return 0.00;
+    if(J<240)    return 0.05;
+    if(J<2000)   return 0.10;
+    if(J<24000)  return 0.15;
+    if(J<200000) return 0.20;
+    return 0.25;
+  }
+  // Minimum boss PL needed to Zenkai = boosted total * 1.10.
+  function bossPL(J, pu){
+    var boosted = pu ? J*(1+auraPct(J)) : J;
+    return boosted * 1.10;
+  }
+  // First PP stage whose boss power >= required boss PL. null if beyond the known table.
+  function ppStage(reqBossPL){
+    for(var i=0;i<PP.length;i++){ if(PP[i][1] >= reqBossPL) return PP[i][0]; }
+    return null;
+  }
+
+  // Dynamic lower-bound floor as a fraction of the record:
+  // 0.2% base; from 2,000,000 up it scales (record / 10,000,000 as a percent), capped at 10%.
+  function floorValue(rec){
+    var pct = Math.min(Math.max(0.2, rec/1e7), 10); // percent
+    return rec * pct/100;
+  }
+
+  // Green selection. Lower bound = max(current, dynamic floor). Eligible: bound < J <= record.
+  // Threshold = 3rd-largest Special Power Gains in window. Best 3 = three highest-J greens.
+  function bestThree(rec, current){
+    var bound = Math.max(current, floorValue(rec));
+    var rows = perStep(rec);
+    var elig = rows.filter(function(r){ return r.J <= rec && r.J > bound; });
+    if(!elig.length) return [];
+    var Hs = elig.map(function(r){return r.H;}).sort(function(a,b){return b-a;});
+    var thresh = Hs[Math.min(2, Hs.length-1)];
+    var greens = elig.filter(function(r){ return r.H >= thresh; });
+    greens.sort(function(a,b){ return a.J - b.J; });
+    return greens.slice(-3);
+  }
+
+  function fmt(n){
+    if(n>=1000) return Math.round(n).toLocaleString('en-US');
+    return (Math.round(n*100)/100).toLocaleString('en-US');
+  }
+
+    var root, recEl, curEl, puEl, outEl, noteEl, swText;
+
+var root, recEl, curEl, puEl, outEl, noteEl, swText;
+
+  function render(){
+    var rec = parseFloat(recEl.value);
+    var curRaw = parseFloat(curEl.value);
+    var current = isNaN(curRaw) ? 0 : curRaw;
+    var pu = puEl.checked;
+    swText.textContent = pu ? 'On' : 'Off';
+
+    if(!rec || rec<=0 || isNaN(rec)){
+      outEl.innerHTML = '<p class="zc-empty">Enter your Base Power Record to see the three best Zenkai targets.</p>';
+      noteEl.textContent = '';
+      return;
+    }
+    if(current >= rec){
+      outEl.innerHTML = '<p class="zc-empty">Current Base Power is at or above your record. Set it lower to see remaining targets.</p>';
+      noteEl.textContent = '';
+      return;
+    }
+    var picks = bestThree(rec, current);
+    if(!picks.length){
+      outEl.innerHTML = '<p class="zc-empty">No targets available with these values.</p>';
+      noteEl.textContent = '';
+      return;
+    }
+    while(picks.length<3) picks.unshift(null);
+
+    var labels = ['1st target','2nd target','3rd target'];
+    outEl.innerHTML = picks.map(function(p,i){
+      if(!p){
+        return '<div class="zc-card zc-card--na">'
+          + '<p class="zc-rank">'+labels[i]+'</p>'
+          + '<p class="zc-pl">&mdash;</p>'
+          + '<p class="zc-pl-label">No further target in range</p></div>';
+      }
+      var req = bossPL(p.J, pu);
+      var stage = ppStage(req);
+      var stageText = (stage===null) ? 'Beyond PP 400+' : 'PP '+stage;
+      return '<div class="zc-card">'
+        + '<p class="zc-rank">'+labels[i]+'</p>'
+        + '<p class="zc-pl">'+fmt(p.J)+'</p>'
+        + '<p class="zc-pl-label">Base Power to Zenkai at</p>'
+        + '<div class="zc-stat">'
+        +   '<div class="zc-stat-row"><span class="zc-stat-k">Special Power Gains</span><span class="zc-stat-v zc-stat-v--gain">'+p.H+'</span></div>'
+        +   '<div class="zc-stat-row"><span class="zc-stat-k">Min. Boss PL</span><span class="zc-stat-v">'+fmt(req)+'</span></div>'
+        +   '<div class="zc-stat-row"><span class="zc-stat-k">First PP Stage</span><span class="zc-stat-v zc-stat-v--pp">'+stageText+'</span></div>'
+        + '</div></div>';
+    }).join('');
+
+    noteEl.textContent = pu
+      ? 'Min. Boss PL and PP stage include your Power Up aura. The toggle does not change which targets are chosen.'
+      : 'Power Up off: Min. Boss PL is the raw target. Turn it on to factor in your aura boost.';
+  }
+
+  function init(){
+    root = document.getElementById('zenkai-calc');
+    if(!root || root.getAttribute('data-zc-ready')) return;
+    root.setAttribute('data-zc-ready','1');
+    recEl = root.querySelector('#zc-record');
+    curEl = root.querySelector('#zc-current');
+    puEl  = root.querySelector('#zc-unlocked');
+    outEl = root.querySelector('#zc-results');
+    noteEl= root.querySelector('#zc-note');
+    swText= root.querySelector('.zc-swtext');
+    recEl.addEventListener('input', render);
+    curEl.addEventListener('input', render);
+    puEl.addEventListener('change', render);
+    render();
+  }
+
+    function boot(){
+        root = document.getElementById('zenkai-calc');
+        if(!root || root.getAttribute('data-zc-ready')) return;
+        root.setAttribute('data-zc-ready','1');
+
+        if(!document.getElementById('zc-style')){
+            var st=document.createElement('style');st.id='zc-style';st.textContent='@import url(\'https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap\');\n\n#zenkai-calc{\n  --wood-dark:#2c1d10;\n  --wood:#4a3420;\n  --panel:#6b4a2a;\n  --panel-inset:#3d2817;\n  --panel-inset-2:#2a1c10;\n  --bevel-light:#8a6238;\n  --bevel-dark:#1c1108;\n  --gold:#f4c542;\n  --gold-dim:#b8902a;\n  --ink:#e8d6b8;\n  --ink-dim:#c2a877;\n  --green:#5fc54a;\n  --green-dark:#2f6b22;\n  --purple:#9b6dd6;\n  --cream:#efe4cc;\n  --bad:#c5503a;\n  font-family:\'Press Start 2P\', \'Courier New\', monospace;\n  color:var(--ink);\n  -webkit-font-smoothing:none;\n  font-smoothing:none;\n  image-rendering:pixelated;\n  display:block;\n  max-width:760px;\n  margin:0 auto;\n}\n#zenkai-calc *{box-sizing:border-box}\n\n#zenkai-calc .zc-frame{\n  background:var(--panel);\n  border:4px solid var(--bevel-dark);\n  border-top-color:var(--bevel-light);\n  border-left-color:var(--bevel-light);\n  box-shadow:inset 0 0 0 4px var(--wood-dark), 0 6px 0 var(--bevel-dark);\n  padding:22px 20px 18px;\n}\n\n#zenkai-calc .zc-heading{\n  font-size:20px;\n  line-height:1.3;\n  color:var(--gold);\n  text-shadow:3px 3px 0 var(--bevel-dark);\n  margin:4px 0 10px;\n  letter-spacing:1px;\n}\n#zenkai-calc .zc-tagline{\n  font-size:9px;\n  line-height:1.6;\n  color:var(--ink);\n  margin:0 0 18px;\n}\n\n/* visually-hidden but screen-reader-available */\n#zenkai-calc .zc-vh{\n  position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;\n  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;\n}\n\n#zenkai-calc .zc-controls{\n  border:3px solid var(--bevel-dark);\n  border-top-color:var(--bevel-light);\n  border-left-color:var(--bevel-light);\n  background:var(--panel-inset);\n  padding:16px 14px;\n  margin:0 0 16px;\n  display:flex;\n  flex-wrap:wrap;\n  gap:16px;\n  align-items:flex-end;\n}\n#zenkai-calc .zc-field{\n  display:flex;\n  flex-direction:column;\n  gap:9px;\n  flex:1 1 200px;\n}\n#zenkai-calc label,\n#zenkai-calc .zc-field-label{\n  font-size:9px;\n  line-height:1.5;\n  color:var(--gold);\n  letter-spacing:.5px;\n}\n#zenkai-calc input[type=number]{\n  font-family:inherit;\n  font-size:13px;\n  color:var(--cream);\n  background:var(--panel-inset-2);\n  border:3px solid var(--bevel-dark);\n  border-top-color:#000;\n  border-left-color:#000;\n  padding:10px 10px;\n  width:100%;\n  -webkit-font-smoothing:none;\n}\n#zenkai-calc input[type=number]:focus-visible{\n  outline:3px solid var(--gold);\n  outline-offset:2px;\n}\n\n/* toggle */\n#zenkai-calc .zc-field--toggle{flex:1 1 160px}\n#zenkai-calc .zc-switch{\n  display:inline-flex;\n  align-items:center;\n  gap:10px;\n  cursor:pointer;\n}\n#zenkai-calc .zc-switch input{\n  position:absolute;width:1px;height:1px;opacity:0;\n}\n#zenkai-calc .zc-track{\n  width:46px;height:24px;flex:none;\n  background:var(--panel-inset-2);\n  border:3px solid var(--bevel-dark);\n  border-top-color:#000;border-left-color:#000;\n  position:relative;\n}\n#zenkai-calc .zc-track::after{\n  content:"";position:absolute;top:2px;left:2px;\n  width:14px;height:14px;background:var(--ink-dim);\n  transition:none;\n}\n#zenkai-calc .zc-switch input:checked + .zc-track{background:var(--green-dark)}\n#zenkai-calc .zc-switch input:checked + .zc-track::after{left:24px;background:var(--green)}\n#zenkai-calc .zc-switch input:focus-visible + .zc-track{outline:3px solid var(--gold);outline-offset:2px}\n#zenkai-calc .zc-swtext{font-size:9px;color:var(--ink-dim)}\n\n/* results */\n#zenkai-calc .zc-results{\n  display:grid;\n  grid-template-columns:repeat(3,1fr);\n  gap:12px;\n}\n#zenkai-calc .zc-card{\n  background:var(--panel-inset);\n  border:3px solid var(--bevel-dark);\n  border-top-color:var(--green-dark);\n  border-left-color:var(--green-dark);\n  padding:12px 11px 13px;\n  display:flex;flex-direction:column;gap:0;\n}\n#zenkai-calc .zc-card--na{\n  border-top-color:var(--bevel-light);\n  border-left-color:var(--bevel-light);\n  opacity:.65;\n}\n#zenkai-calc .zc-rank{\n  font-size:9px;color:var(--green);letter-spacing:.5px;margin-bottom:9px;\n}\n#zenkai-calc .zc-card--na .zc-rank{color:var(--ink-dim)}\n#zenkai-calc .zc-pl{\n  font-size:16px;color:var(--cream);line-height:1.25;\n  word-break:break-word;margin-bottom:5px;\n}\n#zenkai-calc .zc-pl-label{\n  font-size:9px;color:var(--ink-dim);line-height:1.6;margin-bottom:11px;\n}\n#zenkai-calc .zc-stat{\n  border-top:2px solid var(--bevel-dark);\n  padding-top:9px;margin-top:auto;\n  display:flex;flex-direction:column;gap:5px;\n}\n#zenkai-calc .zc-stat-row{\n  display:flex;justify-content:space-between;align-items:baseline;gap:6px;\n}\n#zenkai-calc .zc-stat-k{font-size:8px;color:var(--ink-dim);line-height:1.5}\n#zenkai-calc .zc-stat-v{font-size:10px;color:var(--ink)}\n#zenkai-calc .zc-stat-v--gain{color:var(--gold)}\n#zenkai-calc .zc-stat-v--pp{color:var(--green)}\n\n#zenkai-calc .zc-empty{\n  grid-column:1/-1;text-align:center;color:var(--ink-dim);\n  font-size:10px;line-height:1.8;padding:22px 12px;\n  background:var(--panel-inset);\n  border:3px solid var(--bevel-dark);\n  border-top-color:#000;border-left-color:#000;\n}\n\n#zenkai-calc .zc-note{\n  font-size:9px;line-height:1.9;color:var(--ink-dim);\n  margin:15px 0 0;\n  background:var(--panel-inset);\n  border:3px solid var(--bevel-dark);\n  border-top-color:#000;border-left-color:#000;\n  padding:12px 13px;\n}\n\n@media (max-width:560px){\n  #zenkai-calc .zc-results{grid-template-columns:1fr}\n  #zenkai-calc .zc-heading{font-size:16px}\n  #zenkai-calc .zc-pl{font-size:14px}\n}\n@media (prefers-reduced-motion:reduce){\n  #zenkai-calc *{transition:none!important;animation:none!important}\n}';document.head.appendChild(st);
+        }
+
+        root.innerHTML = '<div class="zc-frame" role="region" aria-labelledby="zc-heading">'
+            + '    <h2 class="zc-heading" id="zc-heading">Zenkai Optimiser</h2>'
+            + '    <p class="zc-tagline">The three best Base Power values to Zenkai at</p>'
+            + ''
+            + '    <fieldset class="zc-controls">'
+            + '      <legend class="zc-vh">Your stats</legend>'
+            + ''
+            + '      <div class="zc-field">'
+            + '        <label for="zc-record">Base Power Record</label>'
+            + '        <input type="number" id="zc-record" min="0" step="any" value="3300000"'
+            + '               inputmode="decimal" autocomplete="off">'
+            + '      </div>'
+            + ''
+            + '      <div class="zc-field">'
+            + '        <label for="zc-current">Current Base Power</label>'
+            + '        <input type="number" id="zc-current" min="0" step="any" value="0"'
+            + '               inputmode="decimal" autocomplete="off">'
+            + '      </div>'
+            + ''
+            + '      <div class="zc-field zc-field--toggle">'
+            + '        <span class="zc-field-label" id="zc-pu-label">Power Up Unlocked?</span>'
+            + '        <label class="zc-switch">'
+            + '          <input type="checkbox" id="zc-unlocked" aria-describedby="zc-pu-help">'
+            + '          <span class="zc-track" aria-hidden="true"></span>'
+            + '          <span class="zc-swtext">Off</span>'
+            + '        </label>'
+            + '        <span class="zc-vh" id="zc-pu-help">Applies the aura boost when computing the minimum boss power level. Does not change which targets are chosen.</span>'
+            + '      </div>'
+            + '    </fieldset>'
+            + ''
+            + '    <output class="zc-results" id="zc-results" aria-live="polite" for="zc-record zc-current zc-unlocked"></output>'
+            + ''
+            + '    <p class="zc-note" id="zc-note"></p>'
+            + '  </div>';
+
+        recEl = root.querySelector('#zc-record');
+        curEl = root.querySelector('#zc-current');
+        puEl  = root.querySelector('#zc-unlocked');
+        outEl = root.querySelector('#zc-results');
+        noteEl= root.querySelector('#zc-note');
+        swText= root.querySelector('.zc-swtext');
+        recEl.addEventListener('input', render);
+        curEl.addEventListener('input', render);
+        puEl.addEventListener('change', render);
+        render();
+    }
+
+    if (window.mw && mw.hook) { mw.hook('wikipage.content').add(boot); }
+    else if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', boot); }
+    else { boot(); }
+})();
