@@ -1,3 +1,12 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zenkai Optimiser — Dragonfist Limitless</title>
+  <style>html,body{margin:0;background:#1a1208;padding:24px;}</style>
+</head>
+<body>
 <div id="zenkai-calc">
   <div class="zc-frame" role="region" aria-labelledby="zc-heading">
     <h2 class="zc-heading" id="zc-heading">Zenkai Optimiser</h2>
@@ -362,37 +371,46 @@
   }
 
   // Build the three target slots, honouring how many Zenkais are already done.
-  // done=0: baseline best three.
-  // done=1: lock baseline target 1; pick the best remaining greens above Current Base Power
-  //         for slots 2 and 3 (re-selected, then re-chained for slot 3).
-  // done=2: lock baseline targets 1 and 2; pick the best green above Current Base Power for slot 3.
-  // Each returned slot: {J,H} with a .locked flag, or null when nothing fits.
+  // - The first `done` slots are LOCKED to their original baseline values.
+  // - Each remaining slot keeps its ORIGINAL baseline target unless Current Base Power
+  //   has passed it (or an earlier slot advanced past it); only then does it advance to
+  //   the next best green above Current. A slot re-chains only when the one before it moved.
+  // Each returned slot: {J,H,locked,passed} or null when nothing fits.
   function planTargets(rec, current, done){
-    // Locked slots always reference the ORIGINAL baseline (floor only), so the
-    // user's progress doesn't reshuffle what they already committed to.
     var baseline = greenList(rec, floorValue(rec)).slice(-3);
     while(baseline.length<3) baseline.unshift(null);
 
-    if(done===0){
-      var picks = bestThree(rec, current);
-      while(picks.length<3) picks.unshift(null);
-      return picks.map(function(p){ return p ? {J:p.J,H:p.H,locked:false} : null; });
-    }
-
     var slots = [];
-    // Lock the first `done` baseline targets.
-    for(var i=0;i<done;i++){
+    for(var i=0;i<done && i<3;i++){
       slots.push(baseline[i] ? {J:baseline[i].J, H:baseline[i].H, locked:true} : null);
     }
-    // Remaining slots: pick best greens strictly above Current Base Power, re-chained.
-    var remaining = 3 - done;
-    var pool = greenList(rec, current); // greens above where the player actually is now
-    // take the highest-value `remaining` greens, lowest->highest for display
-    var chosen = pool.slice(-remaining);
-    while(chosen.length < remaining) chosen.unshift(null);
-    for(var k=0;k<remaining;k++){
-      var c = chosen[k];
-      slots.push(c ? {J:c.J, H:c.H, locked:false} : null);
+
+    // Greens available above where the player actually is now, used only when a slot
+    // must advance. Consumed left-to-right so advanced slots stay distinct and ordered.
+    var pool = greenList(rec, current);
+    var poolIdx = 0;
+
+    for(var s=done; s<3; s++){
+      var orig = baseline[s];
+      var prevJ = slots.length ? (slots[slots.length-1] ? slots[slots.length-1].J : 0) : 0;
+      // A slot must advance if Current has reached/passed its original target,
+      // or if the previous slot advanced beyond this original (keeping order).
+      var mustAdvance = !orig || current >= orig.J || (prevJ && prevJ >= orig.J);
+      if(!mustAdvance){
+        slots.push({J:orig.J, H:orig.H, locked:false});
+        // keep pool cursor past this value so a later advance won't reuse it
+        while(poolIdx < pool.length && pool[poolIdx].J <= orig.J) poolIdx++;
+        continue;
+      }
+      // Advance: take the next green strictly above both Current and the previous slot.
+      var minJ = Math.max(current, prevJ);
+      while(poolIdx < pool.length && pool[poolIdx].J <= minJ) poolIdx++;
+      if(poolIdx < pool.length){
+        var c = pool[poolIdx++];
+        slots.push({J:c.J, H:c.H, locked:false, advanced:true});
+      } else {
+        slots.push(null);
+      }
     }
     return slots;
   }
@@ -453,10 +471,10 @@
         + '</div></div>';
     }).join('');
 
-    var doneNote = done>0 ? ('First '+done+' target'+(done>1?'s':'')+' locked as done; remaining targets are re-selected above your Current Base Power. ') : '';
+    var doneNote = done>0 ? ('First '+done+' target'+(done>1?'s':'')+' locked as done; later targets stay put unless your Current Base Power passes them. ') : '';
     noteEl.textContent = doneNote + (pu
-      ? 'Min. Boss PL and PP stage include your Power Up aura. The toggle does not change which targets are chosen. In case the PL you get from a single punch on the bag is higher than the first target, adjust Current Base Power to match. It will automatically recalculate the next best target.'
-      : 'Power Up off: Min. Boss PL is the raw target. Turn it on to factor in your aura boost.';
+      ? 'Min. Boss PL and PP stage include your Power Up aura. The toggle does not change which targets are chosen.'
+      : 'Power Up off: Min. Boss PL is the raw target. Turn it on to factor in your aura boost.');
   }
 
   function init(){
@@ -481,3 +499,5 @@
   else init();
 })();
 </script>
+</body>
+</html>
