@@ -1,7 +1,7 @@
 <div id="zenkai-calc">
   <div class="zc-frame" role="region" aria-labelledby="zc-heading">
-    <h2 class="zc-heading" id="zc-heading">Limitless Zenkai Calculator</h2>
-    <p class="zc-tagline">Putting the Zen back into Zenkai</p>
+    <h2 class="zc-heading" id="zc-heading">Zenkai Optimiser</h2>
+    <p class="zc-tagline">The three best Base Power values to Zenkai at</p>
 
     <fieldset class="zc-controls">
       <legend class="zc-vh">Your stats</legend>
@@ -18,6 +18,15 @@
                inputmode="decimal" autocomplete="off">
       </div>
 
+      <div class="zc-field zc-field--narrow">
+        <label for="zc-done">Zenkais Done</label>
+        <select id="zc-done" autocomplete="off">
+          <option value="0" selected>0</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+
       <div class="zc-field zc-field--toggle">
         <span class="zc-field-label" id="zc-pu-label">Power Up Unlocked?</span>
         <label class="zc-switch">
@@ -29,7 +38,7 @@
       </div>
     </fieldset>
 
-    <output class="zc-results" id="zc-results" aria-live="polite" for="zc-record zc-current zc-unlocked"></output>
+    <output class="zc-results" id="zc-results" aria-live="polite" for="zc-record zc-current zc-done zc-unlocked"></output>
 
     <p class="zc-note" id="zc-note"></p>
   </div>
@@ -113,6 +122,7 @@
   gap:9px;
   flex:1 1 200px;
 }
+#zenkai-calc .zc-field--narrow{flex:0 1 110px}
 #zenkai-calc label,
 #zenkai-calc .zc-field-label{
   font-size:9px;
@@ -120,7 +130,8 @@
   color:var(--gold);
   letter-spacing:.5px;
 }
-#zenkai-calc input[type=number]{
+#zenkai-calc input[type=number],
+#zenkai-calc select{
   font-family:inherit;
   font-size:13px;
   color:var(--cream);
@@ -132,7 +143,17 @@
   width:100%;
   -webkit-font-smoothing:none;
 }
-#zenkai-calc input[type=number]:focus-visible{
+#zenkai-calc select{
+  cursor:pointer;
+  -webkit-appearance:none;appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--gold) 50%),linear-gradient(135deg,var(--gold) 50%,transparent 50%);
+  background-position:calc(100% - 16px) 16px,calc(100% - 10px) 16px;
+  background-size:6px 6px,6px 6px;
+  background-repeat:no-repeat;
+  padding-right:28px;
+}
+#zenkai-calc input[type=number]:focus-visible,
+#zenkai-calc select:focus-visible{
   outline:3px solid var(--gold);
   outline-offset:2px;
 }
@@ -184,6 +205,26 @@
   border-left-color:var(--bevel-light);
   opacity:.65;
 }
+#zenkai-calc .zc-card--locked{
+  border-top-color:var(--bevel-dark);
+  border-left-color:var(--bevel-dark);
+  background:var(--panel-inset-2);
+  position:relative;
+}
+#zenkai-calc .zc-card--locked .zc-pl,
+#zenkai-calc .zc-card--locked .zc-stat-v{color:var(--ink-dim)}
+#zenkai-calc .zc-card--locked .zc-stat-v--gain,
+#zenkai-calc .zc-card--locked .zc-stat-v--pp{color:var(--ink-dim)}
+#zenkai-calc .zc-card--locked .zc-rank{color:var(--ink-dim)}
+#zenkai-calc .zc-lock{
+  font-size:7px;color:var(--gold-dim);letter-spacing:1px;
+  border:2px solid var(--gold-dim);padding:3px 5px;
+  margin-left:8px;white-space:nowrap;
+}
+#zenkai-calc .zc-rank-row{
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;
+}
+#zenkai-calc .zc-rank-row .zc-rank{margin-bottom:0}
 #zenkai-calc .zc-rank{
   font-size:9px;color:var(--green);letter-spacing:.5px;margin-bottom:9px;
 }
@@ -303,18 +344,57 @@
     return rec * pct/100;
   }
 
-  // Green selection. Lower bound = max(current, dynamic floor). Eligible: bound < J <= record.
-  // Threshold = 3rd-largest Special Power Gains in window. Best 3 = three highest-J greens.
-  function bestThree(rec, current){
-    var bound = Math.max(current, floorValue(rec));
+  // Full green set for a given lower bound. Eligible: bound < J <= record.
+  // Threshold = 3rd-largest Special Power Gains among eligible rows.
+  function greenList(rec, bound){
     var rows = perStep(rec);
     var elig = rows.filter(function(r){ return r.J <= rec && r.J > bound; });
     if(!elig.length) return [];
     var Hs = elig.map(function(r){return r.H;}).sort(function(a,b){return b-a;});
     var thresh = Hs[Math.min(2, Hs.length-1)];
-    var greens = elig.filter(function(r){ return r.H >= thresh; });
-    greens.sort(function(a,b){ return a.J - b.J; });
-    return greens.slice(-3);
+    return elig.filter(function(r){ return r.H >= thresh; }).sort(function(a,b){ return a.J - b.J; });
+  }
+
+  // Baseline best three (highest-J greens above the dynamic floor).
+  function bestThree(rec, current){
+    var bound = Math.max(current, floorValue(rec));
+    return greenList(rec, bound).slice(-3);
+  }
+
+  // Build the three target slots, honouring how many Zenkais are already done.
+  // done=0: baseline best three.
+  // done=1: lock baseline target 1; pick the best remaining greens above Current Base Power
+  //         for slots 2 and 3 (re-selected, then re-chained for slot 3).
+  // done=2: lock baseline targets 1 and 2; pick the best green above Current Base Power for slot 3.
+  // Each returned slot: {J,H} with a .locked flag, or null when nothing fits.
+  function planTargets(rec, current, done){
+    // Locked slots always reference the ORIGINAL baseline (floor only), so the
+    // user's progress doesn't reshuffle what they already committed to.
+    var baseline = greenList(rec, floorValue(rec)).slice(-3);
+    while(baseline.length<3) baseline.unshift(null);
+
+    if(done===0){
+      var picks = bestThree(rec, current);
+      while(picks.length<3) picks.unshift(null);
+      return picks.map(function(p){ return p ? {J:p.J,H:p.H,locked:false} : null; });
+    }
+
+    var slots = [];
+    // Lock the first `done` baseline targets.
+    for(var i=0;i<done;i++){
+      slots.push(baseline[i] ? {J:baseline[i].J, H:baseline[i].H, locked:true} : null);
+    }
+    // Remaining slots: pick best greens strictly above Current Base Power, re-chained.
+    var remaining = 3 - done;
+    var pool = greenList(rec, current); // greens above where the player actually is now
+    // take the highest-value `remaining` greens, lowest->highest for display
+    var chosen = pool.slice(-remaining);
+    while(chosen.length < remaining) chosen.unshift(null);
+    for(var k=0;k<remaining;k++){
+      var c = chosen[k];
+      slots.push(c ? {J:c.J, H:c.H, locked:false} : null);
+    }
+    return slots;
   }
 
   function fmt(n){
@@ -322,13 +402,14 @@
     return (Math.round(n*100)/100).toLocaleString('en-US');
   }
 
-  var root, recEl, curEl, puEl, outEl, noteEl, swText;
+  var root, recEl, curEl, puEl, doneEl, outEl, noteEl, swText;
 
   function render(){
     var rec = parseFloat(recEl.value);
     var curRaw = parseFloat(curEl.value);
     var current = isNaN(curRaw) ? 0 : curRaw;
     var pu = puEl.checked;
+    var done = parseInt(doneEl.value, 10) || 0;
     swText.textContent = pu ? 'On' : 'Off';
 
     if(!rec || rec<=0 || isNaN(rec)){
@@ -341,27 +422,28 @@
       noteEl.textContent = '';
       return;
     }
-    var picks = bestThree(rec, current);
-    if(!picks.length){
+    var slots = planTargets(rec, current, done);
+    if(!slots.some(function(s){return s;})){
       outEl.innerHTML = '<p class="zc-empty">No targets available with these values.</p>';
       noteEl.textContent = '';
       return;
     }
-    while(picks.length<3) picks.unshift(null);
 
     var labels = ['1st target','2nd target','3rd target'];
-    outEl.innerHTML = picks.map(function(p,i){
+    outEl.innerHTML = slots.map(function(p,i){
       if(!p){
         return '<div class="zc-card zc-card--na">'
-          + '<p class="zc-rank">'+labels[i]+'</p>'
+          + '<div class="zc-rank-row"><p class="zc-rank">'+labels[i]+'</p></div>'
           + '<p class="zc-pl">&mdash;</p>'
           + '<p class="zc-pl-label">No further target in range</p></div>';
       }
       var req = bossPL(p.J, pu);
       var stage = ppStage(req);
       var stageText = (stage===null) ? 'Beyond PP 400+' : 'PP '+stage;
-      return '<div class="zc-card">'
-        + '<p class="zc-rank">'+labels[i]+'</p>'
+      var lockBadge = p.locked ? '<span class="zc-lock">Done</span>' : '';
+      var cardCls = 'zc-card' + (p.locked ? ' zc-card--locked' : '');
+      return '<div class="'+cardCls+'">'
+        + '<div class="zc-rank-row"><p class="zc-rank">'+labels[i]+'</p>'+lockBadge+'</div>'
         + '<p class="zc-pl">'+fmt(p.J)+'</p>'
         + '<p class="zc-pl-label">Base Power to Zenkai at</p>'
         + '<div class="zc-stat">'
@@ -371,7 +453,8 @@
         + '</div></div>';
     }).join('');
 
-    noteEl.textContent = pu
+    var doneNote = done>0 ? ('First '+done+' target'+(done>1?'s':'')+' locked as done; remaining targets are re-selected above your Current Base Power. ') : '';
+    noteEl.textContent = doneNote + (pu
       ? 'Min. Boss PL and PP stage include your Power Up aura. The toggle does not change which targets are chosen. In case the PL you get from a single punch on the bag is higher than the first target, adjust Current Base Power to match. It will automatically recalculate the next best target.'
       : 'Power Up off: Min. Boss PL is the raw target. Turn it on to factor in your aura boost.';
   }
@@ -383,12 +466,14 @@
     recEl = root.querySelector('#zc-record');
     curEl = root.querySelector('#zc-current');
     puEl  = root.querySelector('#zc-unlocked');
+    doneEl= root.querySelector('#zc-done');
     outEl = root.querySelector('#zc-results');
     noteEl= root.querySelector('#zc-note');
     swText= root.querySelector('.zc-swtext');
     recEl.addEventListener('input', render);
     curEl.addEventListener('input', render);
     puEl.addEventListener('change', render);
+    doneEl.addEventListener('change', render);
     render();
   }
 
