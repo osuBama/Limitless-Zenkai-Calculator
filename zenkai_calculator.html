@@ -71,6 +71,7 @@
   --green:#5fc54a;
   --green-dark:#2f6b22;
   --purple:#9b6dd6;
+  --purple-text:#b58ce6;
   --cream:#efe4cc;
   --bad:#c5503a;
   font-family:'Press Start 2P', 'Courier New', monospace;
@@ -270,8 +271,16 @@
   word-break:break-word;margin-bottom:5px;
 }
 #zenkai-calc .zc-pl-label{
-  font-size:9px;color:var(--ink-dim);line-height:1.6;margin-bottom:11px;
+  font-size:9px;color:var(--ink-dim);line-height:1.6;margin-bottom:8px;
 }
+#zenkai-calc .zc-powered{
+  font-size:9px;color:var(--ink-dim);line-height:1.6;margin:0 0 11px;
+}
+#zenkai-calc .zc-powered-v{color:var(--purple-text);font-size:10px}
+#zenkai-calc .zc-powered-pct{color:var(--green)}
+#zenkai-calc .zc-powered--none{color:var(--ink-dim);opacity:.75}
+#zenkai-calc .zc-card--locked .zc-powered-v,
+#zenkai-calc .zc-card--locked .zc-powered-pct{color:var(--ink-dim)}
 #zenkai-calc .zc-stat{
   border-top:2px solid var(--bevel-dark);
   padding-top:9px;margin-top:auto;
@@ -487,10 +496,15 @@
       var stageText = (stage===null) ? 'Beyond PP 400+' : 'PP '+stage;
       var lockBadge = p.locked ? '<span class="zc-lock">Done</span>' : '';
       var cardCls = 'zc-card' + (p.locked ? ' zc-card--locked' : '');
+      var auraP = auraPct(p.J);
+      var poweredLine = auraP > 0
+        ? '<p class="zc-powered">Powered up: <span class="zc-powered-v">'+fmt(p.J*(1+auraP))+'</span> <span class="zc-powered-pct">(+'+Math.round(auraP*100)+'%)</span></p>'
+        : '<p class="zc-powered zc-powered--none">No Power Up boost at this tier</p>';
       return '<div class="'+cardCls+'">'
         + '<div class="zc-rank-row"><p class="zc-rank">'+labels[i]+'</p>'+lockBadge+'</div>'
         + '<p class="zc-pl">'+fmt(p.J)+'</p>'
         + '<p class="zc-pl-label">Base Power to Zenkai at</p>'
+        + poweredLine
         + '<div class="zc-stat">'
         +   '<div class="zc-stat-row"><span class="zc-stat-k">Special Power Gains</span><span class="zc-stat-v zc-stat-v--gain">'+p.H+'</span></div>'
         +   '<div class="zc-stat-row"><span class="zc-stat-k">Min. Boss PL</span><span class="zc-stat-v">'+fmt(req)+'</span></div>'
