@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Zenkai Calculator — Dragonfist Limitless</title>
+  <title>Zenkai Optimiser — Dragonfist Limitless</title>
   <style>html,body{margin:0;background:#1a1208;padding:24px;}</style>
 </head>
 <body>
 <div id="zenkai-calc">
   <div class="zc-frame" role="region" aria-labelledby="zc-heading">
     <h2 class="zc-heading" id="zc-heading">Zenkai Calculator Limitless</h2>
-    <p class="zc-tagline">Putting the "Zen" back in Zenkai</p>
+    <p class="zc-tagline">Putting the Zen back in Zenkai</p>
 
     <fieldset class="zc-controls">
       <legend class="zc-vh">Your stats</legend>
@@ -362,18 +362,27 @@
     });
   }
 
-  // Power Up aura boost (% of base added as temporary aura). Tiered by power.
-  function auraPct(J){
-    if(J<20)     return 0.00;
-    if(J<240)    return 0.05;
-    if(J<2000)   return 0.10;
-    if(J<24000)  return 0.15;
-    if(J<200000) return 0.20;
-    return 0.25;
+  // Power Up phases: [unlock PL threshold, flat bonus]. Only the first set (5 phases)
+  // exists in-game so far. Each UNLOCKED phase (base >= threshold) grants
+  // max(flatBonus, 5% of base). Powered-up total = base + sum of unlocked phase bonuses.
+  var POWERUP_PHASES = [
+    [20,      10],
+    [240,     120],
+    [2000,    1000],
+    [24000,   12000],
+    [200000,  100000]
+  ];
+  function poweredUp(base){
+    var total = base;
+    for(var i=0;i<POWERUP_PHASES.length;i++){
+      var thr = POWERUP_PHASES[i][0], flat = POWERUP_PHASES[i][1];
+      if(base >= thr){ total += Math.max(flat, 0.05*base); }
+    }
+    return total;
   }
-  // Minimum boss PL needed to Zenkai = boosted total * 1.10.
+  // Minimum boss PL needed to Zenkai = powered-up total * 1.10.
   function bossPL(J, pu){
-    var boosted = pu ? J*(1+auraPct(J)) : J;
+    var boosted = pu ? poweredUp(J) : J;
     return boosted * 1.10;
   }
   // First PP stage whose boss power >= required boss PL. null if beyond the known table.
@@ -496,10 +505,11 @@
       var stageText = (stage===null) ? 'Beyond PP 400+' : 'PP '+stage;
       var lockBadge = p.locked ? '<span class="zc-lock">Done</span>' : '';
       var cardCls = 'zc-card' + (p.locked ? ' zc-card--locked' : '');
-      var auraP = auraPct(p.J);
-      var poweredLine = auraP > 0
-        ? '<p class="zc-powered">Powered up: <span class="zc-powered-v">'+fmt(p.J*(1+auraP))+'</span> <span class="zc-powered-pct">(+'+Math.round(auraP*100)+'%)</span></p>'
-        : '<p class="zc-powered zc-powered--none">No Power Up boost at this tier</p>';
+      var boosted = poweredUp(p.J);
+      var gain = boosted - p.J;
+      var poweredLine = gain > 0
+        ? '<p class="zc-powered">Powered up: <span class="zc-powered-v">'+fmt(boosted)+'</span> <span class="zc-powered-pct">(+'+fmt(gain)+')</span></p>'
+        : '<p class="zc-powered zc-powered--none">No Power Up unlocked yet</p>';
       return '<div class="'+cardCls+'">'
         + '<div class="zc-rank-row"><p class="zc-rank">'+labels[i]+'</p>'+lockBadge+'</div>'
         + '<p class="zc-pl">'+fmt(p.J)+'</p>'
